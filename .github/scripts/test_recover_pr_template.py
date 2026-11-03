@@ -22,6 +22,10 @@ Only restart CI blocked by its template validation.
 - [x] 🔧 CI / chore
 ## How to test
 Run offline regression tests and inspect the actual restart request.
+## Rigor spine
+Premise: only blocked jobs rerun. Check: the fake API rejects a green run. Countercase: stale PR head.
+## Security review
+Boundary: PR metadata is untrusted. The script runs only base-branch code; no secrets or app runtime paths touched.
 ## Checklist
 - [x] Tests executed
 """

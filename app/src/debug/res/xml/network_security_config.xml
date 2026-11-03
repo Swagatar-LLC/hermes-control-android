@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Development endpoints only; release uses the deny-cleartext main policy. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

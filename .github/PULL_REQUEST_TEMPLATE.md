@@ -25,6 +25,14 @@ Fixes #
 2.
 3.
 
+## Rigor spine
+
+<!-- State the goal and load-bearing premise, a check that could falsify it, and the strongest countercase. Record verified, inferred and unknown claims distinctly. For a no-impact change, write N/A with a reason. -->
+
+## Security review
+
+<!-- Name the assets and trust boundaries affected, traced findings (or why none apply), scanner/test evidence, and unverified surfaces. A reviewer must independently check security-sensitive changes; a scan alone is not a review. -->
+
 ## Screenshots
 
 <!-- REQUIRED if this PR changes UI (anything under ui/, theme/ or drawables): drag in before/after screenshots or a screen recording. No UI change? Write N/A. -->
