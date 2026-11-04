@@ -3,9 +3,6 @@ name: Android CI/CD
 run-name: >-
   ${{ github.event_name == 'pull_request' && format('Android CI PR #{0}', github.event.pull_request.number) || format('Android CI {0}', github.ref_name) }}
 
-env:
-  GRADLE_CACHE_ENCRYPTED_KEY: ${{ secrets.GRADLE_ENCRYPTED_KEY }}
-
 on:
   push:
     branches: [main]
@@ -33,8 +30,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   pr-template:
     name: PR Template
-    # Repo owner's PRs skip the template gate (skipped counts as pass downstream).
-    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'Hy4ri'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -85,6 +81,8 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - '.github/workflows/android.yml'
+              - '.github/workflows/**'
+              - '.github/scripts/**'
               - '.editorconfig'
               - 'flake.nix'
               - 'flake.lock'
@@ -133,7 +131,7 @@ jobs:
           mv ktlint ~/.local/bin/
 
       - name: Add local bin to PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run ktlintCheck + checkColorLiterals (hardcoded Color guard, issue #622)
         run: ./gradlew ktlintCheck checkColorLiterals --continue
@@ -158,7 +156,7 @@ jobs:
     needs: [pr-template, changes]
     if: ${{ !cancelled() && needs.pr-template.result != 'failure' && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -197,7 +195,7 @@ jobs:
     needs: [pr-template, changes]
     if: ${{ !cancelled() && needs.pr-template.result != 'failure' && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -408,6 +406,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TEMPLATE_RESULT: ${{ needs.pr-template.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
           KTLINT_RESULT: ${{ needs.ktlint.result }}
           LINT_RESULT: ${{ needs.android-lint.result }}
           TEST_RESULT: ${{ needs.unit-tests.result }}
@@ -418,11 +418,19 @@ jobs:
           LABEL="ci-red"
           FAILED=0
           FAILED_JOBS=""
-          for entry in "pr-template:$TEMPLATE_RESULT" "ktlint:$KTLINT_RESULT" "android-lint:$LINT_RESULT" "unit-tests:$TEST_RESULT" "build:$BUILD_RESULT" "release-compile:$RELEASE_COMPILE_RESULT" "instrumented-tests:$INSTRUMENTED_RESULT"; do
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            FAILED=1
+            FAILED_JOBS="changes "
+          fi
+          if [[ "${{ github.event_name }}" == "pull_request" && "$TEMPLATE_RESULT" != "success" ]]; then
+            FAILED=1
+            FAILED_JOBS+="pr-template "
+          fi
+          for entry in "ktlint:$KTLINT_RESULT" "android-lint:$LINT_RESULT" "unit-tests:$TEST_RESULT" "build:$BUILD_RESULT" "release-compile:$RELEASE_COMPILE_RESULT" "instrumented-tests:$INSTRUMENTED_RESULT"; do
             name="${entry%%:*}"
             result="${entry#*:}"
             echo "::notice::$name = $result"
-            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+            if [[ "$result" != "success" && ( "$result" != "skipped" || "$CODE_CHANGED" == "true" ) ]]; then
               FAILED=1
               FAILED_JOBS+="$name "
             fi

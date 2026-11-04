@@ -101,8 +101,8 @@ android {
                 "proguard-rules.pro",
             )
             signingConfig = signingConfigs["release"]
-            buildConfigField("boolean", "ALLOW_CLEARTEXT", "true")
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
+            buildConfigField("boolean", "ALLOW_CLEARTEXT", "false")
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
         }
     }
 

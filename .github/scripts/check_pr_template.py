@@ -20,7 +20,7 @@ import urllib.request
 
 MARKER = "<!-- pr-template-check -->"
 TEMPLATE = "https://github.com/{repo}/blob/main/.github/PULL_REQUEST_TEMPLATE.md"
-REQUIRED = ["Summary", "Description", "Type of Change", "How to test", "Checklist"]
+REQUIRED = ["Summary", "Description", "Type of Change", "How to test", "Rigor spine", "Security review", "Checklist"]
 MIN_SUMMARY = 10
 MIN_DESCRIPTION = 20
 MIN_TEST = 20
@@ -100,6 +100,8 @@ def validate(body, ui_files=(), title=None, base=None):
             "Write the steps AND what you observed (screen/device/API level for UI, RPC + response for WS). "
             "If something could not be verified, say so explicitly.",
         ),
+        ("Rigor spine", 40, "Name a premise, a check that could fail, and the strongest countercase; or N/A with a reason."),
+        ("Security review", 40, "Name assets, trust boundaries, findings and unverified surfaces; or N/A with a reason."),
     ]:
         text = present(name)
         if text is not None and prose_len(text) < minimum:

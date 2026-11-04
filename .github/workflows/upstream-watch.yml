@@ -1,0 +1,56 @@
+name: Upstream Watch
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Compare Hy4ri main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare pinned fork with upstream and record drift
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git remote add hy4ri https://github.com/Hy4ri/hermes-mobile.git
+          git fetch --filter=blob:none --no-tags hy4ri main
+          upstream_sha=$(git rev-parse FETCH_HEAD)
+          issue=$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
+            --jq '.[] | select(.pull_request == null and .title == "Upstream drift: Hy4ri main") | .number')
+          if git merge-base --is-ancestor "$upstream_sha" HEAD; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "Fork main now contains upstream $upstream_sha."
+            fi
+            echo "Fork main contains upstream $upstream_sha" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          base=$(git merge-base HEAD "$upstream_sha")
+          count=$(git rev-list --count "HEAD..$upstream_sha")
+          {
+            printf 'Hy4ri main is %s commit(s) ahead of the reviewed fork main.\n\n' "$count"
+            printf 'Upstream head: %s\nFork head: %s\nMerge base: %s\n\n' "$upstream_sha" "$GITHUB_SHA" "$base"
+            printf 'Diff: https://github.com/Hy4ri/hermes-mobile/compare/%s...%s\n\n' "$base" "$upstream_sha"
+            printf 'Review source and .github/ changes independently. Open a sync PR; never merge upstream automatically. Run CI and obtain independent approval before merging.\n'
+          } > "$RUNNER_TEMP/upstream-drift.md"
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file "$RUNNER_TEMP/upstream-drift.md"
+          else
+            gh issue create --title 'Upstream drift: Hy4ri main' --body-file "$RUNNER_TEMP/upstream-drift.md"
+          fi
+          printf 'Upstream drift: %s commit(s), head %s\n' "$count" "$upstream_sha" >> "$GITHUB_STEP_SUMMARY"
