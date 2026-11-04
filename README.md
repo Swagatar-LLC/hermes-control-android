@@ -99,7 +99,7 @@ without recent-conversation publishing. Share-sheet targets and voice shortcuts 
 
 ## Quick Start
 
-1. Install Hermes Mobile from [F-Droid](https://f-droid.org/packages/com.m57.hermescontrol/), or download the APK from the [latest GitHub release](https://github.com/Hy4ri/hermes-mobile/releases/latest).
+1. Install a verified [Swagatar release](https://github.com/Swagatar-LLC/hermes-control-android/releases), or use a signed `main` artifact after the [device pilot checks](docs/swagatar-device-pilot.md). Upstream F-Droid builds use a different signer and cannot update this fork in place.
 2. Start your Hermes dashboard on a host your phone can reach.
 3. Open the app, tap **Sign in**, and follow [Authentication](#authentication).
 
@@ -112,11 +112,11 @@ Older releases may not include them. Select an explicit release tag, then run:
 
 ```bash
 TAG=vX.Y.Z # Replace with the release tag to verify.
-gh release download "$TAG" --repo Hy4ri/hermes-mobile \
+gh release download "$TAG" --repo Swagatar-LLC/hermes-control-android \
   --pattern "hermes-mobile-${TAG}.apk" --pattern SHA256SUMS --pattern version.txt
 sha256sum --check SHA256SUMS
-gh attestation verify "hermes-mobile-${TAG}.apk" --repo Hy4ri/hermes-mobile \
-  --signer-workflow Hy4ri/hermes-mobile/.github/workflows/release.yml
+gh attestation verify "hermes-mobile-${TAG}.apk" --repo Swagatar-LLC/hermes-control-android \
+  --signer-workflow Swagatar-LLC/hermes-control-android/.github/workflows/release.yml
 apksigner verify --print-certs "hermes-mobile-${TAG}.apk"
 ```
 
@@ -131,23 +131,23 @@ These checks answer different questions:
 - **Signing identity:** compare the signer SHA-256 digest with an independently trusted previous APK or maintainer-provided fingerprint.
   A valid APK signature alone does not establish that the signer is trusted.
 
-Maintainers must configure the repository variable `RELEASE_CERTIFICATE_SHA256` with the existing release certificate's SHA-256 digest.
+The fork stores `RELEASE_CERTIFICATE_SHA256` in the protected `android-main-signing` environment alongside its signing material, never as repository-wide secrets.
 Obtain it from an independently trusted release certificate, not from the APK currently being built.
 The workflow fails before publication if this variable is missing or the signer, package, or version differs.
-This change does not rotate the signing key or change F-Droid's signing identity.
+The fork's signing identity is distinct from F-Droid's.
 
 Release retries do not replace assets on an existing GitHub release. Inspect a failed run before retrying;
 an existing release, including an incomplete draft, requires a separate maintainer decision.
 Uploads stay in a draft until downloaded assets pass checksum verification.
-For manual dispatch, select the same tag as the input tag; branch-based dispatch fails to prevent misleading provenance.
-The selected tag must include the updated workflow and verification helper.
+For manual dispatch, select `main` and enter a stable tag pointing to that exact current main commit. The workflow refuses older commits and requires the successful signed main run for that SHA.
+The selected main commit must include the updated workflow and verification helper.
 End-to-end verification requires an explicitly authorized test release.
 
 ## Authentication
 
 The app detects which auth mode your dashboard uses and shows only the fields you need.
 
-> **Security:** Use HTTPS for remote connections. Plain HTTP/WS is for trusted local networks only, because authentication does not encrypt the transport.
+> **Security:** Fork release builds require HTTPS/WSS. Plain HTTP/WS remains available only in disposable debug builds; private Wi-Fi does not encrypt it.
 
 ### Optional app lock
 
