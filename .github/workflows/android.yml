@@ -55,6 +55,21 @@ jobs:
             | jq --arg repo "$GH_REPO" '{pull_request: ., repository: {full_name: $repo}}' > "$RUNNER_TEMP/event.json"
           python3 .github/scripts/check_pr_template.py "$RUNNER_TEMP/event.json"
 
+  version-policy:
+    name: SemVer release boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Reject previews older than the latest stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/version_policy.py
+
   # ─────────────────────────────────────────────────────────────────────
   # Job 0: Detect changes — skips heavy Android build/tests for doc-only PRs
   # ─────────────────────────────────────────────────────────────────────
@@ -394,7 +409,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   ci-summary:
     name: CI Summary
-    needs: [pr-template, changes, ktlint, android-lint, unit-tests, build, release-compile, instrumented-tests]
+    needs: [pr-template, version-policy, changes, ktlint, android-lint, unit-tests, build, release-compile, instrumented-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: always()
@@ -407,6 +422,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TEMPLATE_RESULT: ${{ needs.pr-template.result }}
+          VERSION_POLICY_RESULT: ${{ needs.version-policy.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           CODE_CHANGED: ${{ needs.changes.outputs.code }}
           KTLINT_RESULT: ${{ needs.ktlint.result }}
@@ -419,9 +435,13 @@ jobs:
           LABEL="ci-red"
           FAILED=0
           FAILED_JOBS=""
+          if [[ "$VERSION_POLICY_RESULT" != "success" ]]; then
+            FAILED=1
+            FAILED_JOBS="version-policy "
+          fi
           if [[ "$CHANGES_RESULT" != "success" ]]; then
             FAILED=1
-            FAILED_JOBS="changes "
+            FAILED_JOBS+="changes "
           fi
           if [[ "${{ github.event_name }}" == "pull_request" && "$TEMPLATE_RESULT" != "success" ]]; then
             FAILED=1
@@ -459,7 +479,7 @@ jobs:
   main-apk:
     name: Signed Main APK
     needs: ci-summary
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci-summary.result == 'success'
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci-summary.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: android-main-signing

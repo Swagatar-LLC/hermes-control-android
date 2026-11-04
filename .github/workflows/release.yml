@@ -18,9 +18,11 @@ jobs:
   build-release:
     name: Build and Verify Release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    environment: android-main-signing
     permissions:
       contents: read
+      actions: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
@@ -36,32 +38,16 @@ jobs:
       - name: Validate selected tag and version
         id: version
         env:
-          SELECTED_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          SELECTED_TAG: ${{ github.event.inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
           TAG="$SELECTED_TAG"
-          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
-            echo 'Invalid release tag' >&2
-            exit 1
-          fi
-          VERSION="${TAG#v}"
-          BASE_VERSION="${VERSION%%-*}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-          # Keep SemVer versionCode within Android's supported range.
-          if (( ${#MAJOR} > 6 || ${#MINOR} > 2 || ${#PATCH} > 2 )); then
-            echo 'Version components exceed versionCode limits' >&2
-            exit 1
-          fi
-          CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
-          if (( CODE < 1 || CODE > 2100000000 )); then
-            echo 'Invalid Android versionCode' >&2
-            exit 1
-          fi
-          PRERELEASE=false
-          if [[ "$VERSION" == *-* ]]; then PRERELEASE=true; fi
-          printf 'tag=%s\nversion=%s\ncode=%s\nprerelease=%s\n' \
-            "$TAG" "$VERSION" "$CODE" "$PRERELEASE" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GH_REPO/actions/workflows/android.yml/runs?event=push&branch=main&head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/main-runs.json"
+          python3 .github/scripts/release_version.py \
+            "$TAG" "$(<VERSION)" "$GITHUB_SHA" "$RUNNER_TEMP/main-runs.json" >> "$GITHUB_OUTPUT"
 
       - name: Resolve release source on main
         id: source
@@ -73,11 +59,14 @@ jobs:
           set -euo pipefail
           SHA=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
           # Provenance must identify the same source that produces the APK.
-          [[ "$RUN_REF" == "refs/tags/$TAG" && "$RUN_SHA" == "$SHA" ]] || {
-            echo 'Run this workflow from the selected release tag, not a branch' >&2
+          [[ "$RUN_REF" == "refs/heads/main" && "$RUN_SHA" == "$SHA" ]] || {
+            echo 'Run this workflow from main, tagged at the exact current commit' >&2
             exit 1
           }
-          git merge-base --is-ancestor "$SHA" refs/remotes/origin/main
+          [[ "$SHA" == "$(git rev-parse refs/remotes/origin/main)" ]] || {
+            echo 'Release tag is not the current main commit' >&2
+            exit 1
+          }
           git checkout --detach "$SHA"
           printf 'sha=%s\n' "$SHA" >> "$GITHUB_OUTPUT"
 
@@ -102,7 +91,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           validate-wrappers: true
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTED_KEY }}
+          cache-provider: basic
 
       - name: Require signing secrets
         env:
